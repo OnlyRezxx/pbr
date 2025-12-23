@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { PBRMaps, MapType, MaterialSettings, Preset } from './types';
 import { generateBaseTexture, analyzeTextureMetadata } from './services/geminiService';
@@ -18,8 +17,6 @@ const PRESETS: Preset[] = [
   { name: 'Sci-Fi Hull', icon: 'fa-rocket', prompt: 'Titanium spaceship armor panels, carbon fiber weave, subtle heat discoloration, futuristic patterns, seamless' },
   { name: 'Dry Earth', icon: 'fa-mountain', prompt: 'Arid desert mud flats, deep cracks, sun-baked clay, realistic sediment layers, seamless' },
 ];
-
-// NOTE: Manual 'aistudio' declaration removed as it conflicts with the environment-provided 'AIStudio' type definition.
 
 const App: React.FC = () => {
   const [maps, setMaps] = useState<PBRMaps>({
@@ -47,21 +44,45 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const checkKey = async () => {
+      // Priority 1: Check if API_KEY is already present in process.env (Local Dev)
+      const envKey = process.env.API_KEY;
+      if (envKey && envKey !== 'undefined' && envKey.length > 5) {
+        setShowKeyPrompt(false);
+        return;
+      }
+
+      // Priority 2: Check AI Studio Bridge (Platform)
       try {
-        // Use the globally available aistudio object
-        const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
-        if (!hasKey) setShowKeyPrompt(true);
+        const aiStudio = (window as any).aistudio;
+        if (aiStudio) {
+          const hasKey = await aiStudio.hasSelectedApiKey();
+          if (!hasKey) {
+            setShowKeyPrompt(true);
+          }
+        } else {
+          // If no bridge and no env key, we must show prompt as a fallback
+          setShowKeyPrompt(true);
+        }
       } catch (e) {
-        console.warn("AI Studio context not available");
+        console.warn("Key verification failed, showing prompt as fallback.");
+        setShowKeyPrompt(true);
       }
     };
     checkKey();
   }, []);
 
   const handleOpenKeySelector = async () => {
-    // Open the key selection dialog and proceed immediately after triggering
-    await (window as any).aistudio?.openSelectKey();
-    setShowKeyPrompt(false);
+    try {
+      const aiStudio = (window as any).aistudio;
+      if (aiStudio) {
+        await aiStudio.openSelectKey();
+      } else {
+        setError("AI Studio selector is only available within the platform. Please set API_KEY in your .env file for local development.");
+      }
+      setShowKeyPrompt(false);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const processAllMaps = useCallback(async (albedoUrl: string) => {
@@ -97,15 +118,21 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!prompt) return;
     
-    try {
-      const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
-      if (!hasKey) {
+    // Final check before generation
+    const currentKey = process.env.API_KEY;
+    const aiStudio = (window as any).aistudio;
+    
+    if (!currentKey || currentKey === 'undefined') {
+      if (aiStudio) {
+        const hasKey = await aiStudio.hasSelectedApiKey();
+        if (!hasKey) {
+          setShowKeyPrompt(true);
+          return;
+        }
+      } else {
         setShowKeyPrompt(true);
         return;
       }
-    } catch (e) {
-      setError("AI Studio key manager not found.");
-      return;
     }
 
     setIsGenerating(true);
@@ -114,7 +141,6 @@ const App: React.FC = () => {
       const albedoUrl = await generateBaseTexture(prompt);
       await processAllMaps(albedoUrl);
     } catch (err: any) {
-      // If the request fails due to missing project configuration, prompt user to re-select key
       if (err.message?.includes("Requested entity was not found")) {
         setShowKeyPrompt(true);
       }
