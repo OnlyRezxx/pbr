@@ -1,0 +1,7 @@
+{
+  "name": "Roblox PBR Forge",
+  "description": "A professional AI-powered PBR texture generator specifically designed for Roblox Studio creators. Generate Albedo, Normal, Roughness, and Metalness maps from text prompts or existing images.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
