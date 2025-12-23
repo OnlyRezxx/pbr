@@ -12,9 +12,8 @@ interface PreviewProps {
 
 const FALLBACK_TEXTURE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-// This component handles the actual 3D objects and uses R3F hooks
 const Scene = ({ maps, shape, settings }: PreviewProps) => {
-  // Memoize URLs to prevent unnecessary reloading
+  // Use unique keys for textures to force reload only when necessary
   const textureUrls = useMemo(() => [
     maps.albedo || FALLBACK_TEXTURE,
     maps.normal || FALLBACK_TEXTURE,
@@ -31,17 +30,15 @@ const Scene = ({ maps, shape, settings }: PreviewProps) => {
     maps.height
   ]);
 
-  // useLoader is safe here because Scene is a child of <Canvas>
   const textures = useLoader(THREE.TextureLoader, textureUrls);
   const [albedo, normal, roughness, metalness, ao, height] = textures;
 
-  // Configure textures for tiling
   useEffect(() => {
     textures.forEach((t) => {
       if (t) {
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
         t.repeat.set(settings.repeat, settings.repeat);
-        t.anisotropy = 16;
+        t.anisotropy = 8;
         t.needsUpdate = true;
       }
     });
@@ -70,7 +67,6 @@ const Scene = ({ maps, shape, settings }: PreviewProps) => {
   );
 };
 
-// Main component that provides the Canvas context
 const Preview3D: React.FC<PreviewProps> = (props) => {
   return (
     <div className="w-full h-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700/50 relative">
@@ -87,11 +83,11 @@ const Preview3D: React.FC<PreviewProps> = (props) => {
         gl={{ 
           antialias: true, 
           alpha: true,
-          powerPreference: "high-performance"
+          powerPreference: "high-performance",
+          preserveDrawingBuffer: true
         }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.setClearColor(0x000000, 0);
         }}
       >
         <Suspense fallback={null}>
