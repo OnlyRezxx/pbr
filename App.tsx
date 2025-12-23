@@ -44,27 +44,23 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const checkKey = async () => {
-      // Priority 1: Check if API_KEY is already present in process.env (Local Dev)
+      // Priority 1: Check if a valid API_KEY exists in environment
       const envKey = process.env.API_KEY;
-      if (envKey && envKey !== 'undefined' && envKey.length > 5) {
+      if (envKey && envKey !== 'undefined' && envKey.length > 10) {
         setShowKeyPrompt(false);
         return;
       }
 
-      // Priority 2: Check AI Studio Bridge (Platform)
+      // Priority 2: Check AI Studio platform bridge
       try {
         const aiStudio = (window as any).aistudio;
         if (aiStudio) {
           const hasKey = await aiStudio.hasSelectedApiKey();
-          if (!hasKey) {
-            setShowKeyPrompt(true);
-          }
+          setShowKeyPrompt(!hasKey);
         } else {
-          // If no bridge and no env key, we must show prompt as a fallback
           setShowKeyPrompt(true);
         }
       } catch (e) {
-        console.warn("Key verification failed, showing prompt as fallback.");
         setShowKeyPrompt(true);
       }
     };
@@ -76,10 +72,10 @@ const App: React.FC = () => {
       const aiStudio = (window as any).aistudio;
       if (aiStudio) {
         await aiStudio.openSelectKey();
+        setShowKeyPrompt(false);
       } else {
-        setError("AI Studio selector is only available within the platform. Please set API_KEY in your .env file for local development.");
+        setError("Platform selector unavailable. Please add a new API_KEY to your Vercel/Local environment variables.");
       }
-      setShowKeyPrompt(false);
     } catch (err) {
       console.error(err);
     }
@@ -106,10 +102,12 @@ const App: React.FC = () => {
         metalnessIntensity: metadata.suggestedMetalness || 0
       }));
     } catch (err: any) {
-      if (err.message?.includes("Requested entity was not found")) {
+      if (err.message?.includes("leaked") || err.message?.includes("403")) {
+        setError("API Key Terblokir (Leaked). Silakan buat API Key baru di Google AI Studio!");
         setShowKeyPrompt(true);
+      } else {
+        setError(err.message || "Failed processing high-quality maps.");
       }
-      setError(err.message || "Failed processing high-quality maps.");
     } finally {
       setIsGenerating(false);
     }
@@ -118,33 +116,20 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!prompt) return;
     
-    // Final check before generation
-    const currentKey = process.env.API_KEY;
-    const aiStudio = (window as any).aistudio;
-    
-    if (!currentKey || currentKey === 'undefined') {
-      if (aiStudio) {
-        const hasKey = await aiStudio.hasSelectedApiKey();
-        if (!hasKey) {
-          setShowKeyPrompt(true);
-          return;
-        }
-      } else {
-        setShowKeyPrompt(true);
-        return;
-      }
-    }
-
     setIsGenerating(true);
     setError(null);
     try {
       const albedoUrl = await generateBaseTexture(prompt);
       await processAllMaps(albedoUrl);
     } catch (err: any) {
-      if (err.message?.includes("Requested entity was not found")) {
+      if (err.message?.includes("leaked") || err.message?.includes("403")) {
+        setError("API Key Terblokir (Leaked). Silakan buat API Key baru di Google AI Studio!");
         setShowKeyPrompt(true);
+      } else if (err.message?.includes("Requested entity was not found")) {
+        setShowKeyPrompt(true);
+      } else {
+        setError(err.message || "Generation failed.");
       }
-      setError(err.message || "Generation failed.");
       setIsGenerating(false);
     }
   };
@@ -175,29 +160,29 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
       {/* Key Modal */}
       {showKeyPrompt && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[110] flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-10 text-center shadow-2xl">
-            <div className="w-20 h-20 bg-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-8 text-indigo-400">
-              <i className="fas fa-key text-3xl"></i>
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[110] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-slate-900 border border-red-500/20 rounded-3xl p-10 text-center shadow-2xl">
+            <div className="w-20 h-20 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-8 text-red-500">
+              <i className="fas fa-shield-virus text-3xl animate-pulse"></i>
             </div>
-            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Access Required</h2>
+            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">API Key Invalid</h2>
             <p className="text-slate-400 text-sm mb-10 leading-relaxed">
-              To use <b>Gemini 3 Pro</b> for high-quality 2K textures, please select an API key from a <b>paid GCP project</b>.
+              Kunci API Anda mungkin telah <b>bocor (leaked)</b> atau belum disetel. Silakan buat kunci baru di Google AI Studio dan update Environment Variables Anda.
             </p>
             <div className="flex flex-col gap-4">
               <button 
                 onClick={handleOpenKeySelector}
                 className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl transition-all active:scale-95 shadow-lg shadow-indigo-600/20"
               >
-                Select API Key
+                Gunakan Platform Selector
               </button>
               <a 
-                href="https://ai.google.dev/gemini-api/docs/billing" 
+                href="https://aistudio.google.com/app/apikey" 
                 target="_blank" 
                 rel="noreferrer"
-                className="text-xs text-slate-500 hover:text-indigo-400 transition-colors"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-bold py-2"
               >
-                Billing Documentation <i className="fas fa-external-link-alt ml-1"></i>
+                Buat API Key Baru <i className="fas fa-external-link-alt ml-1"></i>
               </a>
             </div>
           </div>
@@ -351,7 +336,7 @@ const App: React.FC = () => {
       {error && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-3 rounded-full text-xs font-bold shadow-2xl z-[200] flex items-center gap-3 animate-bounce">
           <i className="fas fa-exclamation-triangle"></i>
-          {error}
+          <span className="max-w-xs truncate">{error}</span>
           <button onClick={() => setError(null)} className="ml-2 hover:opacity-70"><i className="fas fa-times"></i></button>
         </div>
       )}
